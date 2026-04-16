@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import GameContainer from '@/components/Game/GameContainer';
+import React, { useState, useEffect, useRef } from 'react';
+import GameContainer, { GameContainerHandle } from '@/components/Game/GameContainer';
 import { Sword, Wand2, Shield, Zap, Heart, Trophy, User, Package, Zap as ManaIcon, Target } from 'lucide-react';
 
 export default function Home() {
+  const engineRef = useRef<GameContainerHandle>(null);
+  const [activeAction, setActiveAction] = useState('1');
   const [stats, setStats] = useState({
     hp: 100,
     maxHp: 100,
@@ -21,9 +23,27 @@ export default function Home() {
     manaRegen: 5,
     arcane: 10,
     weapon: 'magic',
+    inventory: ['magic'] as string[],
+    character: 'bulky',
     lifeSteal: 0,
     bleedChance: 0
   });
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const keyMap: Record<string, string> = {
+        'Digit1': '1', 'Digit2': '2', 'Digit3': '3', 'Digit4': '4', 
+        'Digit5': '5', 'Digit6': '6', 'Digit7': '7', 'KeyM': 'M'
+      };
+      if (keyMap[e.code]) {
+        setActiveAction(keyMap[e.code]);
+        // Limpa o destaque após um curto período
+        setTimeout(() => setActiveAction(''), 200);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <main className="h-screen w-screen grid grid-cols-[260px_1fr_260px] grid-rows-[100px_1fr_140px] gap-3 p-3 bg-[#1a1423]">
@@ -69,8 +89,17 @@ export default function Home() {
 
         <div className="text-right">
           <div className="text-[#ffcc33] font-bold">Level {stats.level}</div>
-          <div className="text-[11px] uppercase opacity-80">Gato Bombado Mago</div>
+          <div className="text-[11px] uppercase opacity-80">
+            {stats.character === 'bulky' ? 'Gato Bárbaro' : stats.character === 'ninja' ? 'Gato Ninja' : 'Gato Sacerdote'}
+          </div>
         </div>
+        
+        <button 
+          onClick={() => engineRef.current?.togglePause()}
+          className="bg-[#2d1e3e] border-2 border-[#ffcc33] text-[#ffcc33] px-3 py-1 font-bold text-[10px] uppercase hover:bg-[#ffcc33] hover:text-[#1a1423] transition-all"
+        >
+          Pausa [P]
+        </button>
       </header>
 
       {/* LEFT SIDEBAR */}
@@ -109,7 +138,7 @@ export default function Home() {
           <div className="w-full h-full border-[1px] border-dashed border-[#a388ee] rounded-full animate-[spin_20s_linear_infinite]" />
         </div>
         <div className="w-full h-full relative z-10">
-          <GameContainer onStatsUpdate={setStats} />
+          <GameContainer ref={engineRef} onStatsUpdate={setStats} />
         </div>
         <div className="absolute bottom-4 right-4 bg-black/50 px-3 py-1 text-[10px] uppercase tracking-widest pointer-events-none flex flex-col items-end gap-1">
           <div>Arena: Coliseum of Meow-gic</div>
@@ -125,9 +154,26 @@ export default function Home() {
           <h2 className="text-[12px] border-b-2 border-[#4d3d60] pb-1 mb-3 text-[#a388ee] uppercase font-bold flex items-center gap-2">
             <Package size={14} /> Inventário
           </h2>
-          <StatRow label="Garras de Ferro" value="Equipado" />
-          <StatRow label="Manto de Cetim" value="Equipado" />
-          <StatRow label="Anel Arcano" value="Lvl 3" />
+          <div className="flex flex-col gap-2">
+            {stats.inventory.map((item) => (
+              <div 
+                key={item}
+                onClick={() => {
+                  engineRef.current?.executeAction('switch_weapon_' + item);
+                }}
+                className={`
+                  p-2 border-2 text-[10px] uppercase font-bold cursor-pointer transition-all flex items-center gap-2
+                  ${stats.weapon === item ? 'border-[#ffcc33] bg-[#2d2642]' : 'border-[#4d3d60] hover:border-[#a388ee]'}
+                `}
+              >
+                {item === 'magic' && <Zap size={12} className="text-[#a388ee]" />}
+                {item === 'pistol' && <Target size={12} className="text-[#ff4d6d]" />}
+                {item === 'knife' && <Sword size={12} className="text-[#cccccc]" />}
+                {item === 'magic' ? 'Magia' : item === 'pistol' ? 'Pistola' : 'Facas'}
+                {stats.weapon === item && <span className="ml-auto text-[8px] text-[#ffcc33]">ATIVO</span>}
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="mt-auto">
@@ -145,14 +191,14 @@ export default function Home() {
 
       {/* FOOTER ACTION BAR */}
       <footer className="panel col-span-3 grid grid-cols-8 gap-2 p-2">
-        <ActionSlot k="1" icon="⚔️" name="Golpe Brutal" selected />
-        <ActionSlot k="2" icon="🔥" name="Bola de Fogo" />
-        <ActionSlot k="3" icon="🌀" name="Vórtice" />
-        <ActionSlot k="4" icon="✨" name="Escudo Luz" />
-        <ActionSlot k="5" icon="💊" name="Poção Vida" />
-        <ActionSlot k="6" icon="🧪" name="Poção Mana" />
-        <ActionSlot k="7" icon="⭐" name="Ultimate" />
-        <ActionSlot k="M" icon="🗺️" name="Mapa" />
+        <ActionSlot k="1" icon="⚔️" name="Golpe Brutal" selected={activeAction === '1'} onClick={() => engineRef.current?.executeAction('melee')} />
+        <ActionSlot k="2" icon="🔥" name="Bola de Fogo" selected={activeAction === '2'} onClick={() => engineRef.current?.executeAction('fireball')} />
+        <ActionSlot k="3" icon="🌀" name="Vórtice" selected={activeAction === '3'} onClick={() => engineRef.current?.executeAction('vortex')} />
+        <ActionSlot k="4" icon="✨" name="Escudo Luz" selected={activeAction === '4'} onClick={() => engineRef.current?.executeAction('shield')} />
+        <ActionSlot k="5" icon="💊" name="Poção Vida" selected={activeAction === '5'} onClick={() => engineRef.current?.executeAction('potion_hp')} />
+        <ActionSlot k="6" icon="🧪" name="Poção Mana" selected={activeAction === '6'} onClick={() => engineRef.current?.executeAction('potion_mp')} />
+        <ActionSlot k="7" icon="⭐" name="Ultimate" selected={activeAction === '7'} onClick={() => engineRef.current?.executeAction('ultimate')} />
+        <ActionSlot k="M" icon="🗺️" name="Mapa" selected={activeAction === 'M'} onClick={() => engineRef.current?.executeAction('map')} />
       </footer>
     </main>
   );
@@ -175,11 +221,13 @@ function DropSlot({ icon }: { icon: string }) {
   );
 }
 
-function ActionSlot({ k, icon, name, selected = false }: { k: string; icon: string; name: string; selected?: boolean }) {
+function ActionSlot({ k, icon, name, selected = false, onClick }: { k: string; icon: string; name: string; selected?: boolean; onClick?: () => void }) {
   return (
-    <div className={`
-      relative flex flex-col items-center justify-center border-[3px] transition-all cursor-pointer
-      ${selected ? 'border-[#ffcc33] bg-[#2d2642]' : 'border-[#4d3d60] bg-[#1a1423] hover:border-[#a388ee]'}
+    <div 
+      onClick={onClick}
+      className={`
+      relative flex flex-col items-center justify-center border-[3px] transition-all cursor-pointer active:scale-95
+      ${selected ? 'border-[#ffcc33] bg-[#2d2642] shadow-[0_0_10px_#ffcc33]' : 'border-[#4d3d60] bg-[#1a1423] hover:border-[#a388ee]'}
     `}>
       <span className="absolute top-1 right-1.5 text-[8px] text-gray-500 font-bold">{k}</span>
       <span className="text-2xl mb-1">{icon}</span>

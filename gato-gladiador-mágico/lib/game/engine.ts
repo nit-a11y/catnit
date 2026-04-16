@@ -1,4 +1,4 @@
-export type GameState = 'menu' | 'playing' | 'upgrade' | 'gameover';
+export type GameState = 'menu' | 'playing' | 'upgrade' | 'gameover' | 'paused';
 
 interface EngineCallbacks {
   onStateChange: (state: GameState) => void;
@@ -46,7 +46,24 @@ export class GameEngine {
   }
 
   private setupInput() {
-    window.addEventListener('keydown', (e) => this.keys.add(e.code));
+    window.addEventListener('keydown', (e) => {
+      this.keys.add(e.code);
+      
+      if (e.code === 'Escape' || e.code === 'KeyP') {
+        this.togglePause();
+      }
+
+      if (this.state === 'playing') {
+        if (e.code === 'Digit1') this.executeAction('melee');
+        if (e.code === 'Digit2') this.executeAction('fireball');
+        if (e.code === 'Digit3') this.executeAction('vortex');
+        if (e.code === 'Digit4') this.executeAction('shield');
+        if (e.code === 'Digit5') this.executeAction('potion_hp');
+        if (e.code === 'Digit6') this.executeAction('potion_mp');
+        if (e.code === 'Digit7') this.executeAction('ultimate');
+        if (e.code === 'KeyM') this.executeAction('map');
+      }
+    });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     
     this.canvas.addEventListener('mousemove', (e) => {
@@ -60,25 +77,101 @@ export class GameEngine {
     this.canvas.addEventListener('mousedown', (e) => {
       if (this.state === 'playing') {
         if (e.button === 0) { // Left Click
-          const shot = this.player.shoot(this.mousePos, this.projectiles);
-          if (shot) {
-            this.screenShake = this.player.currentWeapon === 'pistol' ? 5 : 2;
-          }
+          this.executeAction('shoot');
         } else if (e.button === 2) { // Right Click - Special
-          const specialSucceeded = this.player.special(this.mousePos, this.projectiles, (text, color) => {
-            this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 40, text, color));
-          });
-          if (specialSucceeded) this.screenShake = 15;
+          this.executeAction('special');
         }
       }
     });
     
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && this.state === 'playing') {
-        const hit = this.player.melee(this.enemies, (enemy) => this.killEnemy(enemy));
-        if (hit) this.screenShake = 10;
+        this.executeAction('melee');
       }
     });
+  }
+
+  public togglePause() {
+    if (this.state === 'playing') {
+      this.state = 'paused';
+      this.callbacks.onStateChange('paused');
+    } else if (this.state === 'paused') {
+      this.state = 'playing';
+      this.callbacks.onStateChange('playing');
+      this.lastTime = performance.now();
+      this.loop(this.lastTime);
+    }
+  }
+
+  public setCharacter(type: string) {
+    this.player.switchCharacter(type);
+    this.updateStats();
+  }
+
+  public executeAction(action: string) {
+    if (this.state !== 'playing') return;
+
+    const floatingText = (t: string, c: string) => {
+      this.floatingTexts.push(new FloatingText(this.player.x, this.player.y - 40, t, c));
+    };
+
+    switch (action) {
+      case 'shoot':
+        if (this.player.shoot(this.mousePos, this.projectiles)) {
+          this.screenShake = this.player.currentWeapon === 'pistol' ? 5 : 2;
+        }
+        break;
+      case 'special':
+        if (this.player.special(this.mousePos, this.projectiles, floatingText)) {
+          this.screenShake = 15;
+        }
+        break;
+      case 'melee':
+        if (this.player.melee(this.enemies, (enemy) => this.killEnemy(enemy))) {
+          this.screenShake = 10;
+        }
+        break;
+      case 'fireball':
+        if (this.player.fireball(this.mousePos, this.projectiles, floatingText)) {
+          this.screenShake = 8;
+        }
+        break;
+      case 'vortex':
+        if (this.player.vortex(this.mousePos, this.projectiles, floatingText)) {
+          this.screenShake = 5;
+        }
+        break;
+      case 'shield':
+        this.player.activateShield(floatingText);
+        break;
+      case 'potion_hp':
+        this.player.usePotionHP(floatingText);
+        break;
+      case 'potion_mp':
+        this.player.usePotionMP(floatingText);
+        break;
+      case 'ultimate':
+        if (this.player.useUltimate(this.enemies, (e) => this.killEnemy(e), floatingText)) {
+          this.screenShake = 50;
+        }
+        break;
+      case 'map':
+        floatingText("RADAR ATIVADO!", "#ffcc33");
+        // Visual effect: highlight enemies
+        this.enemies.forEach(e => {
+          this.createExplosion(e.x, e.y, '#ffcc33', 3);
+        });
+        break;
+      case 'switch_weapon_magic':
+        this.player.switchWeapon('magic');
+        break;
+      case 'switch_weapon_pistol':
+        this.player.switchWeapon('pistol');
+        break;
+      case 'switch_weapon_knife':
+        this.player.switchWeapon('knife');
+        break;
+    }
   }
 
   public start() {
@@ -141,6 +234,8 @@ export class GameEngine {
       manaRegen: this.player.manaRegen,
       arcane: this.player.arcane,
       weapon: this.player.currentWeapon,
+      inventory: this.player.weaponInventory,
+      character: this.player.characterClass,
       lifeSteal: this.player.lifeSteal,
       bleedChance: this.player.bleedChance
     });
@@ -282,14 +377,14 @@ export class GameEngine {
 
   private generateUpgrades() {
     const pool = [
-      { type: 'magic', name: 'Bola de Fogo', description: 'Aumenta Inteligência e Dano Mágico', value: 15 },
-      { type: 'weapon', name: 'Garras de Aço', description: 'Aumenta Força e Dano Físico', value: 15 },
-      { type: 'speed', name: 'Agilidade Felina', description: 'Aumenta Agilidade e Velocidade', value: 0.05 },
-      { type: 'health', name: 'Vigor de Leão', description: 'Aumenta Resistência e Vida Máxima', value: 50 },
-      { type: 'defense', name: 'Pelo Blindado', description: 'Aumenta Definição e Reduz Dano', value: 5 },
-      { type: 'mana', name: 'Mente Serena', description: 'Aumenta Mana Máxima e Regeneração', value: 100 },
-      { type: 'pistol', name: 'Pistola 9mm', description: 'Troca para Pistola (Balas Rápidas)', value: 0 },
-      { type: 'knife', name: 'Faca de Arremesso', description: 'Troca para Facas (Sangramento)', value: 0 },
+      { type: 'attribute_str', name: 'Força Bruta', description: 'Aumenta Força e Dano Físico', value: 10 },
+      { type: 'attribute_def', name: 'Definição Muscular', description: 'Aumenta Definição e Resiliência', value: 10 },
+      { type: 'attribute_sta', name: 'Resistência de Elite', description: 'Aumenta Resistência e Vida Máxima', value: 10 },
+      { type: 'attribute_agi', name: 'Agilidade Superior', description: 'Aumenta Agilidade e Velocidade', value: 20 },
+      { type: 'magic', name: 'Sabedoria Arcana', description: 'Aumenta Inteligência e Dano Mágico', value: 15 },
+      { type: 'mana', name: 'Fluxo de Mana', description: 'Aumenta Mana Máxima e Regeneração', value: 100 },
+      { type: 'pistol', name: 'Pistola 9mm', description: 'Adiciona Pistola ao Inventário', value: 0 },
+      { type: 'knife', name: 'Faca de Arremesso', description: 'Adiciona Facas ao Inventário', value: 0 },
       { type: 'lifesteal', name: 'Sede de Sangue', description: 'Recupera Vida ao matar inimigos', value: 5 },
       { type: 'bleed', name: 'Lâmina Serrilhada', description: 'Chance de causar Sangramento', value: 0.2 },
     ];
@@ -340,8 +435,11 @@ class Player {
   
   // New Mechanics
   currentWeapon: 'magic' | 'pistol' | 'knife' = 'magic';
+  weaponInventory: string[] = ['magic'];
+  characterClass: 'bulky' | 'ninja' | 'mage' = 'bulky';
   lifeSteal = 0;
   bleedChance = 0;
+  shieldTimer = 0;
   
   // Attributes for UI
   strength = 10; definition = 10; stamina = 10; intelligence = 10; arcane = 10;
@@ -356,9 +454,11 @@ class Player {
 
   update(dx: number, dy: number, dt: number, cw: number, ch: number) {
     const mag = Math.sqrt(dx * dx + dy * dy);
+    // Speed depends on agility (speed attribute)
+    const currentSpeed = this.speed;
     if (mag > 0) {
-      this.x += (dx / mag) * this.speed * dt;
-      this.y += (dy / mag) * this.speed * dt;
+      this.x += (dx / mag) * currentSpeed * dt;
+      this.y += (dy / mag) * currentSpeed * dt;
     }
     this.x = Math.max(this.radius, Math.min(cw - this.radius, this.x));
     this.y = Math.max(this.radius, Math.min(ch - this.radius, this.y));
@@ -367,34 +467,62 @@ class Player {
     if (this.meleeCooldown <= 300) this.isMeleeing = false;
     
     if (this.muzzleFlash > 0) this.muzzleFlash -= dt;
+    if (this.shieldTimer > 0) this.shieldTimer -= dt;
     
     // Mana regen
-    this.mp = Math.min(this.maxMp, this.mp + (this.manaRegen * dt / 1000));
+    const regenFactor = this.characterClass === 'mage' ? 1.5 : 1;
+    this.mp = Math.min(this.maxMp, this.mp + (this.manaRegen * regenFactor * dt / 1000));
+  }
+
+  switchCharacter(type: string) {
+    this.characterClass = type as any;
+    if (type === 'bulky') {
+      this.strength += 5;
+      this.stamina += 5;
+      this.maxHp += 50;
+      this.hp = Math.min(this.maxHp, this.hp + 50);
+    } else if (type === 'ninja') {
+      this.speed += 0.05;
+      this.bleedChance += 0.1;
+    } else if (type === 'mage') {
+      this.intelligence += 5;
+      this.maxMp += 100;
+      this.mp = Math.min(this.maxMp, this.mp + 100);
+    }
+  }
+
+  switchWeapon(type: string) {
+    if (this.weaponInventory.includes(type)) {
+      this.currentWeapon = type as any;
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.translate(this.x, this.y);
     
-    const muscleScale = 1 + (this.strength - 10) / 100;
+    const muscleScale = this.characterClass === 'bulky' ? 1.4 : (this.characterClass === 'mage' ? 0.9 : 1.1);
+    const bonusScale = 1 + (this.strength - 10) / 100;
+    const finalScale = muscleScale * bonusScale;
     
-    // Cape
-    ctx.fillStyle = '#7e22ce';
+    // Cape (longer for mage)
+    ctx.fillStyle = this.characterClass === 'mage' ? '#4c1d95' : '#7e22ce';
     ctx.beginPath();
-    ctx.moveTo(-15, -5); ctx.lineTo(-20 * muscleScale, 25); ctx.lineTo(20 * muscleScale, 25); ctx.lineTo(15, -5);
+    const capeLen = this.characterClass === 'mage' ? 35 : 25;
+    ctx.moveTo(-15, -5); ctx.lineTo(-20 * finalScale, capeLen); ctx.lineTo(20 * finalScale, capeLen); ctx.lineTo(15, -5);
     ctx.fill();
 
     // Body
-    ctx.fillStyle = '#d1d1d1';
+    ctx.fillStyle = this.characterClass === 'ninja' ? '#222' : '#d1d1d1';
     ctx.fillRect(-15, -15, 30, 30);
     
-    // Arms
-    ctx.fillStyle = '#b0b0b0';
-    ctx.fillRect(-25 * muscleScale, -5, 10 * muscleScale, 20);
-    ctx.fillRect(15, -5, 10 * muscleScale, 20);
+    // Arms (bigger for bulky)
+    ctx.fillStyle = this.characterClass === 'ninja' ? '#333' : '#b0b0b0';
+    ctx.fillRect(-20 * finalScale - 5, -5, 10 * finalScale, 20);
+    ctx.fillRect(15, -5, 10 * finalScale, 20);
     
     // Head
-    ctx.fillStyle = '#d1d1d1';
+    ctx.fillStyle = this.characterClass === 'ninja' ? '#222' : '#d1d1d1';
     ctx.fillRect(-10, -25, 20, 15);
     
     // Ears
@@ -406,6 +534,17 @@ class Player {
     // Eyes
     ctx.fillStyle = this.mp > 20 ? '#a388ee' : '#555';
     ctx.fillRect(-6, -20, 3, 3); ctx.fillRect(3, -20, 3, 3);
+    
+    // Shield Visual
+    if (this.shieldTimer > 0) {
+      ctx.strokeStyle = '#4cc9f0';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = '#4cc9f0';
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+    }
     
     // Weapon Visual
     if (this.currentWeapon === 'pistol') {
@@ -500,19 +639,86 @@ class Player {
   }
 
   takeDamage(amount: number) {
+    if (this.shieldTimer > 0) return;
     const reduced = amount * (1 - (this.definition / 250));
     this.hp -= reduced;
   }
 
+  fireball(mousePos: { x: number, y: number }, projectiles: Projectile[], floatingText: (t: string, c: string) => void) {
+    const manaCost = 25;
+    if (this.mp < manaCost) { floatingText("MANA INSUFICIENTE!", "#ff4d6d"); return false; }
+    this.mp -= manaCost;
+    const angle = Math.atan2(mousePos.y - this.y, mousePos.x - this.x);
+    projectiles.push(new Projectile(this.x, this.y, angle, (this.intelligence + this.arcane) * 2, 'magic'));
+    floatingText("FIREBALL!", "#ffcc33");
+    return true;
+  }
+
+  vortex(mousePos: { x: number, y: number }, projectiles: Projectile[], floatingText: (t: string, c: string) => void) {
+    const manaCost = 35;
+    if (this.mp < manaCost) { floatingText("MANA INSUFICIENTE!", "#ff4d6d"); return false; }
+    this.mp -= manaCost;
+    const angle = Math.atan2(mousePos.y - this.y, mousePos.x - this.x);
+    // Vortex is a special slow projectile that hits multiple times
+    const p = new Projectile(this.x, this.y, angle, this.arcane * 0.5, 'magic');
+    p.radius = 80; // Large radius
+    projectiles.push(p);
+    floatingText("VÓRTICE!", "#4cc9f0");
+    return true;
+  }
+
+  activateShield(floatingText: (t: string, c: string) => void) {
+    const manaCost = 30;
+    if (this.mp < manaCost) { floatingText("MANA INSUFICIENTE!", "#ff4d6d"); return; }
+    this.mp -= manaCost;
+    this.shieldTimer = 5000; // 5 seconds
+    floatingText("ESCUDO ATIVO!", "#4cc9f0");
+  }
+
+  usePotionHP(floatingText: (t: string, c: string) => void) {
+    const heal = this.maxHp * 0.4;
+    this.hp = Math.min(this.maxHp, this.hp + heal);
+    floatingText("CURA!", "#ff4d6d");
+  }
+
+  usePotionMP(floatingText: (t: string, c: string) => void) {
+    const regen = this.maxMp * 0.4;
+    this.mp = Math.min(this.maxMp, this.mp + regen);
+    floatingText("MANA!", "#4cc9f0");
+  }
+
+  useUltimate(enemies: Enemy[], onKill: (e: Enemy) => void, floatingText: (t: string, c: string) => void) {
+    const manaCost = 80;
+    if (this.mp < manaCost) { floatingText("MANA INSUFICIENTE!", "#ff4d6d"); return false; }
+    this.mp -= manaCost;
+    enemies.forEach(e => {
+      e.takeDamage(this.intelligence * 10);
+      if (e.hp <= 0) onKill(e);
+    });
+    floatingText("MEOW-CALYPSE!", "#ffcc33");
+    return true;
+  }
+
   applyUpgrade(upgrade: any) {
+    if (upgrade.type === 'attribute_str') { this.strength += upgrade.value; }
+    if (upgrade.type === 'attribute_def') { this.definition += upgrade.value; }
+    if (upgrade.type === 'attribute_sta') { 
+      this.stamina += upgrade.value; 
+      const hpBonus = upgrade.value * 5;
+      this.maxHp += hpBonus; 
+      this.hp += hpBonus; 
+    }
+    if (upgrade.type === 'attribute_agi') { this.speed += upgrade.value / 1000; }
     if (upgrade.type === 'magic') { this.intelligence += upgrade.value; this.arcane += 5; }
-    if (upgrade.type === 'weapon') { this.strength += upgrade.value; }
-    if (upgrade.type === 'speed') { this.speed += upgrade.value; }
-    if (upgrade.type === 'health') { this.stamina += 10; this.maxHp += upgrade.value; this.hp = this.maxHp; }
-    if (upgrade.type === 'defense') { this.definition += upgrade.value; }
     if (upgrade.type === 'mana') { this.maxMp += upgrade.value; this.manaRegen += 2; this.mp = this.maxMp; }
-    if (upgrade.type === 'pistol') this.currentWeapon = 'pistol';
-    if (upgrade.type === 'knife') this.currentWeapon = 'knife';
+    if (upgrade.type === 'pistol') {
+      if (!this.weaponInventory.includes('pistol')) this.weaponInventory.push('pistol');
+      this.currentWeapon = 'pistol';
+    }
+    if (upgrade.type === 'knife') {
+      if (!this.weaponInventory.includes('knife')) this.weaponInventory.push('knife');
+      this.currentWeapon = 'knife';
+    }
     if (upgrade.type === 'lifesteal') this.lifeSteal += upgrade.value;
     if (upgrade.type === 'bleed') this.bleedChance += upgrade.value;
   }
@@ -604,7 +810,7 @@ class Enemy {
 }
 
 class Projectile {
-  x: number; y: number; vx: number; vy: number; radius = 6; damage: number; color: string; type: string;
+  x: number; y: number; vx: number; vy: number; radius: number; damage: number; color: string; type: string;
 
   constructor(x: number, y: number, angle: number, damage: number, type: string) {
     this.x = x; this.y = y; this.type = type;
@@ -612,6 +818,7 @@ class Projectile {
     this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
     this.damage = damage;
     this.color = type === 'bullet' ? '#ff0000' : (type === 'knife' ? '#cccccc' : '#a388ee');
+    this.radius = type === 'magic' ? 10 : 6;
   }
 
   update(dt: number) { this.x += this.vx * dt; this.y += this.vy * dt; }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { GameEngine } from '@/lib/game/engine';
 import Overlay from './Overlay';
 
@@ -8,19 +8,33 @@ interface GameContainerProps {
   onStatsUpdate?: (stats: any) => void;
 }
 
-const GameContainer: React.FC<GameContainerProps> = ({ onStatsUpdate }) => {
+export interface GameContainerHandle {
+  executeAction: (action: string) => void;
+  togglePause: () => void;
+}
+
+const GameContainer = forwardRef<GameContainerHandle, GameContainerProps>(({ onStatsUpdate }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
-  const [gameState, setGameState] = useState<'menu' | 'playing' | 'upgrade' | 'gameover'>('menu');
+  const [gameState, setGameState] = useState<'menu' | 'playing' | 'upgrade' | 'gameover' | 'paused'>('menu');
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [availableUpgrades, setAvailableUpgrades] = useState<any[]>([]);
+
+  useImperativeHandle(ref, () => ({
+    executeAction: (action: string) => {
+      engineRef.current?.executeAction(action);
+    },
+    togglePause: () => {
+      engineRef.current?.togglePause();
+    }
+  }));
 
   useEffect(() => {
     if (!canvasRef.current) return;
 
     const engine = new GameEngine(canvasRef.current, {
-      onStateChange: (state) => setGameState(state),
+      onStateChange: (state) => setGameState(state as any),
       onScoreChange: (s) => setScore(s),
       onLevelChange: (l) => setLevel(l),
       onStatsUpdate: (stats) => onStatsUpdate?.(stats),
@@ -31,10 +45,7 @@ const GameContainer: React.FC<GameContainerProps> = ({ onStatsUpdate }) => {
     });
 
     engineRef.current = engine;
-
-    return () => {
-      engine.destroy();
-    };
+    return () => engine.destroy();
   }, [onStatsUpdate]);
 
   const startGame = () => {
@@ -42,6 +53,17 @@ const GameContainer: React.FC<GameContainerProps> = ({ onStatsUpdate }) => {
       engineRef.current.start();
       setGameState('playing');
     }
+  };
+
+  const resumeGame = () => {
+    if (gameState === 'paused') {
+      engineRef.current?.togglePause();
+    }
+  };
+
+  const switchCharacter = (type: string) => {
+    engineRef.current?.setCharacter(type);
+    resumeGame();
   };
 
   const selectUpgrade = (upgrade: any) => {
@@ -69,16 +91,20 @@ const GameContainer: React.FC<GameContainerProps> = ({ onStatsUpdate }) => {
       />
       
       <Overlay 
-        state={gameState} 
+        state={gameState as any} 
         score={score} 
         level={level}
         upgrades={availableUpgrades}
         onStart={startGame}
         onRestart={restartGame}
         onSelectUpgrade={selectUpgrade}
+        onResume={resumeGame}
+        onSwitchCharacter={switchCharacter}
       />
     </div>
   );
-};
+});
+
+GameContainer.displayName = 'GameContainer';
 
 export default GameContainer;

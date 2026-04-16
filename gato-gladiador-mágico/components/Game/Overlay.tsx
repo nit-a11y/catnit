@@ -2,16 +2,18 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sword, Wand2, Shield, Zap, Heart, Trophy } from 'lucide-react';
+import { Sword, Wand2, Shield, Zap, Heart, Trophy, User, Target, FlaskConical } from 'lucide-react';
 
 interface OverlayProps {
-  state: 'menu' | 'playing' | 'upgrade' | 'gameover';
+  state: 'menu' | 'playing' | 'upgrade' | 'gameover' | 'paused';
   score: number;
   level: number;
   upgrades: any[];
   onStart: () => void;
   onRestart: () => void;
   onSelectUpgrade: (upgrade: any) => void;
+  onResume: () => void;
+  onSwitchCharacter: (type: string) => void;
 }
 
 const Overlay: React.FC<OverlayProps> = ({ 
@@ -21,10 +23,54 @@ const Overlay: React.FC<OverlayProps> = ({
   upgrades, 
   onStart, 
   onRestart, 
-  onSelectUpgrade 
+  onSelectUpgrade,
+  onResume,
+  onSwitchCharacter
 }) => {
   return (
     <AnimatePresence>
+      {state === 'paused' && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 bg-[#1a1423]/95 backdrop-blur-md flex flex-col items-center justify-center z-50 p-8"
+        >
+          <h2 className="text-5xl font-black text-[#a388ee] mb-8 italic uppercase outline-text">PAUSA TÁTICA</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl mb-12">
+            <CharacterCard 
+              name="Gato Bárbaro" 
+              type="bulky" 
+              desc="+Força & +Vida" 
+              icon={<Trophy className="text-[#ffcc33]" />} 
+              onSelect={onSwitchCharacter} 
+            />
+            <CharacterCard 
+              name="Gato Ninja" 
+              type="ninja" 
+              desc="+Velocidade & +Sangramento" 
+              icon={<Zap className="text-yellow-400" />} 
+              onSelect={onSwitchCharacter} 
+            />
+            <CharacterCard 
+              name="Gato Sacerdote" 
+              type="mage" 
+              desc="+Mana & +Inteligência" 
+              icon={<Wand2 className="text-[#4cc9f0]" />} 
+              onSelect={onSwitchCharacter} 
+            />
+          </div>
+
+          <button 
+            onClick={onResume}
+            className="panel bg-[#ffcc33] text-[#1a1423] font-bold py-4 px-12 border-b-4 border-[#4d3d60] hover:bg-[#a388ee] hover:text-white transition-all transform hover:scale-110 active:scale-95 text-2xl uppercase"
+          >
+            VOLTAR AO COMBATE
+          </button>
+        </motion.div>
+      )}
+
       {state === 'menu' && (
         <motion.div 
           initial={{ opacity: 0 }}
@@ -72,11 +118,16 @@ const Overlay: React.FC<OverlayProps> = ({
                 className="bg-[#1a1423] border-4 border-[#4d3d60] p-6 hover:border-[#a388ee] hover:bg-[#2d1e3e] transition-all flex flex-col items-center text-center group"
               >
                 <div className="w-16 h-16 bg-[#a388ee]/20 border-2 border-[#a388ee]/30 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  {upgrade.type === 'weapon' && <Sword className="text-[#ffcc33] w-8 h-8" />}
-                  {upgrade.type === 'magic' && <Wand2 className="text-[#4cc9f0] w-8 h-8" />}
-                  {upgrade.type === 'defense' && <Shield className="text-green-400 w-8 h-8" />}
-                  {upgrade.type === 'speed' && <Zap className="text-yellow-400 w-8 h-8" />}
-                  {upgrade.type === 'health' && <Heart className="text-[#ff4d6d] w-8 h-8" />}
+                  {upgrade.type.includes('attribute_str') && <Sword className="text-[#ffcc33] w-8 h-8" />}
+                  {upgrade.type.includes('attribute_def') && <Shield className="text-green-400 w-8 h-8" />}
+                  {upgrade.type.includes('attribute_sta') && <Heart className="text-[#ff4d6d] w-8 h-8" />}
+                  {upgrade.type.includes('attribute_agi') && <Zap className="text-yellow-400 w-8 h-8" />}
+                  {upgrade.type.includes('magic') && <Wand2 className="text-[#4cc9f0] w-8 h-8" />}
+                  {upgrade.type.includes('mana') && <FlaskConical className="text-[#a388ee] w-8 h-8" />}
+                  {upgrade.type.includes('pistol') && <Target className="text-[#ff0000] w-8 h-8" />}
+                  {upgrade.type.includes('knife') && <Sword className="text-[#cccccc] w-8 h-8" />}
+                  {upgrade.type.includes('lifesteal') && <Heart className="text-[#ff4d6d] w-8 h-8" />}
+                  {upgrade.type.includes('bleed') && <Target className="text-red-500 w-8 h-8" />}
                 </div>
                 <h3 className="text-xl font-bold text-[#f0f0f0] mb-2 uppercase tracking-tight">{upgrade.name}</h3>
                 <p className="text-[#f0f0f0]/60 text-sm font-mono">{upgrade.description}</p>
@@ -110,5 +161,22 @@ const Overlay: React.FC<OverlayProps> = ({
     </AnimatePresence>
   );
 };
+
+function CharacterCard({ name, type, desc, icon, onSelect }: { name: string, type: string, desc: string, icon: React.ReactNode, onSelect: (t: string) => void }) {
+  return (
+    <motion.div 
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      onClick={() => onSelect(type)}
+      className="bg-[#2d1e3e] border-4 border-[#4d3d60] p-6 cursor-pointer hover:border-[#ffcc33] group transition-all"
+    >
+      <div className="text-4xl mb-4 group-hover:scale-110 transition-transform flex justify-center">
+        {icon}
+      </div>
+      <h3 className="text-lg font-bold text-[#ffcc33] mb-1 uppercase text-center">{name}</h3>
+      <p className="text-[10px] text-white/60 font-mono text-center uppercase">{desc}</p>
+    </motion.div>
+  );
+}
 
 export default Overlay;
