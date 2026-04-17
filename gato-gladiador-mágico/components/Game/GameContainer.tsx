@@ -6,14 +6,17 @@ import Overlay from './Overlay';
 
 interface GameContainerProps {
   onStatsUpdate?: (stats: any) => void;
+  isInstallable?: boolean;
+  onInstall?: () => void;
 }
 
 export interface GameContainerHandle {
   executeAction: (action: string) => void;
   togglePause: () => void;
+  setJoystickMove: (x: number, y: number) => void;
 }
 
-const GameContainer = forwardRef<GameContainerHandle, GameContainerProps>(({ onStatsUpdate }, ref) => {
+const GameContainer = forwardRef<GameContainerHandle, GameContainerProps>(({ onStatsUpdate, isInstallable, onInstall }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const [gameState, setGameState] = useState<'menu' | 'playing' | 'upgrade' | 'gameover' | 'paused'>('menu');
@@ -27,6 +30,9 @@ const GameContainer = forwardRef<GameContainerHandle, GameContainerProps>(({ onS
     },
     togglePause: () => {
       engineRef.current?.togglePause();
+    },
+    setJoystickMove: (x: number, y: number) => {
+      engineRef.current?.setJoystickMove(x, y);
     }
   }));
 
@@ -48,8 +54,11 @@ const GameContainer = forwardRef<GameContainerHandle, GameContainerProps>(({ onS
     return () => engine.destroy();
   }, [onStatsUpdate]);
 
-  const startGame = () => {
+  const startGame = (characterType: string, petType: string, powerType: string) => {
     if (engineRef.current) {
+      engineRef.current.setCharacter(characterType);
+      engineRef.current.setPet(petType);
+      engineRef.current.setPower(powerType);
       engineRef.current.start();
       setGameState('playing');
     }
@@ -95,6 +104,8 @@ const GameContainer = forwardRef<GameContainerHandle, GameContainerProps>(({ onS
         score={score} 
         level={level}
         upgrades={availableUpgrades}
+        isInstallable={isInstallable}
+        onInstall={onInstall}
         onStart={startGame}
         onRestart={restartGame}
         onSelectUpgrade={selectUpgrade}

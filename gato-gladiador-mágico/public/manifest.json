@@ -1,0 +1,31 @@
+{
+  "name": "Gato Gladiador Mágico",
+  "short_name": "GatoGladiador",
+  "description": "Um jogo de arena retro 2D onde você é um gato bombado mago lutando pela sobrevivência.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1423",
+  "theme_color": "#ffcc33",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/cat/192/192",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://picsum.photos/seed/cat/512/512",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "https://picsum.photos/seed/gameplay/1920/1080",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Gato Gladiador Gameplay"
+    }
+  ]
+}
